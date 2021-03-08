@@ -32,7 +32,7 @@ jobs:
     - name: Extract version
       run: |
         VERSION=$(cat pom.xml | grep '<revision' | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+')
-        echo "VERSION=${VERSION}-${{github.run_number}}" > target/version.txt
+        echo "${VERSION}-${{github.run_number}}" > target/version.txt
 
     - name: Upload plugin
       uses: actions/upload-artifact@v2.2.2
@@ -76,6 +76,7 @@ jobs:
           files: gitea.hpi
           name: ${{ env.VERSION }}
           tag_name: v${{ env.VERSION }}
+          body: Relase v${{ env.VERSION }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
