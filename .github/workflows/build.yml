@@ -33,5 +33,5 @@ jobs:
     - name: Upload plugin
       uses: actions/upload-artifact@v2
       with:
-        name: jobcacher
+        name: gitea
         path: target/gitea.hpi
