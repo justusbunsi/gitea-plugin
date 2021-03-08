@@ -71,11 +71,11 @@ jobs:
           echo "VERSION=${v}" >> $GITHUB_ENV
           
       - name: Create release
-          uses: softprops/action-gh-release@v1
-          with:
-            files: gitea.hpi
-            name: ${{ env.VERSION }}
-            tag_name: v${{ env.VERSION }}
-            fail_on_unmatched_files: true
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: gitea.hpi
+          name: ${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
