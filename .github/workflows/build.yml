@@ -50,14 +50,32 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+      - uses: actions/checkout@v2.3.4
+          
+      - name: Setup Git user
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Download plugin
         uses: actions/download-artifact@v2.0.8
         with:
           name: gitea
           path: .
-
-      - name: create tag
+      
+      - name: Create git tag
         run: |
-          ls -la
-          cat version.txt
-    
+          v=$(cat version.txt)
+          git tag v$v
+          git push origin v$v
+          echo "VERSION=${v}" >> $GITHUB_ENV
+          
+      - name: Create release
+          uses: softprops/action-gh-release@v1
+          with:
+            files: gitea.hpi
+            name: ${{ env.VERSION }}
+            tag_name: v${{ env.VERSION }}
+            fail_on_unmatched_files: true
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
