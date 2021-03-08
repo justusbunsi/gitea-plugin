@@ -49,7 +49,7 @@ jobs:
 
     steps:
       - name: Download plugin
-        uses: download-artifact@v2.0.8
+        uses: actions/download-artifact@v2.0.8
         with:
           name: gitea
           path: gitea.hpi
