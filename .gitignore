@@ -1,5 +1,6 @@
 target/
 work*/
+/bin/
 
 # IntelliJ project files 
 *.iml
@@ -12,6 +13,8 @@ work*/
 .classpath
 .project
 build/
+
+/.factorypath
 
 /nb-configuration.xml
 
