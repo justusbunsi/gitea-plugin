@@ -32,13 +32,15 @@ jobs:
     - name: Extract version
       run: |
         VERSION=$(cat pom.xml | grep '<revision' | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+')
-        echo "VERSION=${VERSION}-${{github.run_number}}"  >> $GITHUB_ENV
+        echo "VERSION=${VERSION}-${{github.run_number}}" > target/version.txt
 
     - name: Upload plugin
       uses: actions/upload-artifact@v2.2.2
       with:
         name: gitea
-        path: target/gitea.hpi
+        path: |
+          target/gitea.hpi
+          target/version.txt
 
   release:
     needs: [build]
@@ -52,10 +54,10 @@ jobs:
         uses: actions/download-artifact@v2.0.8
         with:
           name: gitea
-          path: gitea.hpi
+          path: .
 
       - name: create tag
         run: |
-          echo $VERSION
           ls -la
+          cat version.txt
     
