@@ -8,6 +8,10 @@
         "automerge": true
       },
       {
+        "updateTypes": ["minor"],
+        "dependencyDashboardApproval": false
+      },
+      {
         "updateTypes": ["major"],
         "dependencyDashboardApproval": true
       }
