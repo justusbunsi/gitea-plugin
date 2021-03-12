@@ -118,7 +118,7 @@ public class GiteaSCMNavigator extends SCMNavigator {
     }
 
     @NonNull
-    public List<SCMTrait<?>> getTraits() {
+    public List<SCMTrait<? extends SCMTrait<?>>> getTraits() {
         return Collections.unmodifiableList(traits);
     }
 
