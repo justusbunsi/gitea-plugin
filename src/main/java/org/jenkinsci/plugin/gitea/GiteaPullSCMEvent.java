@@ -188,7 +188,8 @@ public class GiteaPullSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPullReques
                             SCMHeadOrigin.DEFAULT,
                             source.getRepoOwner(),
                             source.getRepository(),
-                            "dummy-name"), null);
+                            "dummy-name",
+                            p.getTitle()), null);
                 }
             } else {
                 String originOwner = p.getHead().getRepo().getOwner().getUsername();
@@ -210,7 +211,8 @@ public class GiteaPullSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPullReques
                                     : new SCMHeadOrigin.Fork(originOwner + "/" + originRepository),
                             originOwner,
                             originRepository,
-                            p.getHead().getRef());
+                            p.getHead().getRef(),
+                            p.getTitle());
                     result.put(h, getPayload().getAction() == GiteaPullRequestEventType.CLOSED
                             ? null
                             : new PullRequestSCMRevision(

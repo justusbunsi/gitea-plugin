@@ -371,7 +371,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                                             : new SCMHeadOrigin.Fork(originOwner + "/" + originRepository),
                                     originOwner,
                                     originRepository,
-                                    p.getHead().getRef());
+                                    p.getHead().getRef(),
+                                    p.getTitle());
                             PullRequestSCMRevision revision = new PullRequestSCMRevision(
                                     head,
                                     new BranchSCMRevision(

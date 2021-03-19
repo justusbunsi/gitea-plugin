@@ -30,6 +30,7 @@ import jenkins.scm.api.mixin.ChangeRequestCheckoutStrategy;
 import jenkins.scm.api.mixin.ChangeRequestSCMHead2;
 
 public class PullRequestSCMHead extends SCMHead implements ChangeRequestSCMHead2 {
+    private static final long serialVersionUID = 1L;
     private final long id;
     private final BranchSCMHead target;
     private final ChangeRequestCheckoutStrategy strategy;
@@ -37,6 +38,7 @@ public class PullRequestSCMHead extends SCMHead implements ChangeRequestSCMHead2
     private final String originOwner;
     private final String originRepository;
     private final SCMHeadOrigin origin;
+    private final String title;
 
     /**
      * Constructor.
@@ -52,7 +54,7 @@ public class PullRequestSCMHead extends SCMHead implements ChangeRequestSCMHead2
      */
     public PullRequestSCMHead(@NonNull String name, long id, BranchSCMHead target,
                               ChangeRequestCheckoutStrategy strategy, SCMHeadOrigin origin, String originOwner,
-                              String originRepository, String originName) {
+                              String originRepository, String originName, String title) {
         super(name);
         this.id = id;
         this.target = target;
@@ -61,6 +63,7 @@ public class PullRequestSCMHead extends SCMHead implements ChangeRequestSCMHead2
         this.originOwner = originOwner;
         this.originRepository = originRepository;
         this.originName = originName;
+        this.title = title;
     }
 
     @NonNull
@@ -79,6 +82,10 @@ public class PullRequestSCMHead extends SCMHead implements ChangeRequestSCMHead2
     @Override
     public String getId() {
         return Long.toString(id);
+    }
+
+    public String getTitle() {
+        return title;
     }
 
     @NonNull
