@@ -189,7 +189,7 @@ public class GiteaPullSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPullReques
                             source.getRepoOwner(),
                             source.getRepository(),
                             "dummy-name",
-                            p.getTitle()), null);
+                            null), null);
                 }
             } else {
                 String originOwner = p.getHead().getRepo().getOwner().getUsername();
