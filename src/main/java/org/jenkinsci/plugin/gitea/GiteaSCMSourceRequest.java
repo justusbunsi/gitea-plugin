@@ -338,10 +338,10 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
     /**
      * Provides the {@link GiteaConnection} to use for the request.
      *
-     * @param gitHub {@link GiteaConnection} to use for the request.
+     * @param gitea {@link GiteaConnection} to use for the request.
      */
-    public void setConnection(@CheckForNull GiteaConnection gitHub) {
-        this.connection = gitHub;
+    public void setConnection(@CheckForNull GiteaConnection gitea) {
+        this.connection = gitea;
     }
 
     /**
