@@ -85,6 +85,13 @@
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>display-url-api</artifactId>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/com.github.zeripath/java-gitea-api -->
+        <dependency>
+            <groupId>com.github.zeripath</groupId>
+            <artifactId>java-gitea-api</artifactId>
+            <version>1.14.0-3-SNAPSHOT</version>
+        </dependency>
+
         <!-- Currently just here for interactive testing via hpi:run: -->
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>

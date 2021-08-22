@@ -45,6 +45,14 @@ import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.VersionNumber;
+import io.gitea.ApiClient;
+import io.gitea.ApiException;
+import io.gitea.auth.ApiKeyAuth;
+import io.gitea.auth.HttpBasicAuth;
+import io.gitea.api.RepositoryApi;
+import io.gitea.model.PullRequest;
+import io.gitea.model.Reference;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -95,6 +103,8 @@ import org.jenkins.ui.icon.IconSet;
 import org.jenkinsci.plugin.gitea.client.api.Gitea;
 import org.jenkinsci.plugin.gitea.client.api.GiteaAnnotatedTag;
 import org.jenkinsci.plugin.gitea.client.api.GiteaAuth;
+import org.jenkinsci.plugin.gitea.client.api.GiteaAuthToken;
+import org.jenkinsci.plugin.gitea.client.api.GiteaAuthUser;
 import org.jenkinsci.plugin.gitea.client.api.GiteaBranch;
 import org.jenkinsci.plugin.gitea.client.api.GiteaCommitDetail;
 import org.jenkinsci.plugin.gitea.client.api.GiteaConnection;
@@ -180,92 +190,77 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
     }
 
     @Override
-    protected SCMRevision retrieve(@NonNull SCMHead head, @NonNull TaskListener listener)
-            throws IOException, InterruptedException {
-        try (GiteaConnection c = gitea().open()) {
+    protected SCMRevision retrieve(@NonNull SCMHead head, @NonNull TaskListener listener) throws IOException, InterruptedException {
+        try {
+            ApiClient client = giteaConnectViaClient();
+            listener.getLogger().format("=== NEW IMPLEMENTATION ===");
             listener.getLogger().format("Looking up repository %s/%s%n", repoOwner, repository);
-            giteaRepository = c.fetchRepository(repoOwner, repository);
+
+            RepositoryApi repoApi = new RepositoryApi(client);
+            // ensure repository exists
+            repoApi.repoGet(repoOwner, repository);
 
             if (head instanceof BranchSCMHead) {
                 listener.getLogger().format("Querying the current revision of branch %s...%n", head.getName());
-                String revision = c.fetchBranch(repoOwner, repository, head.getName()).getCommit().getId();
+                String revision = repoApi.repoGetBranch(repoOwner, repository, head.getName()).getCommit().getId();
                 listener.getLogger().format("Current revision of branch %s is %s%n", head.getName(), revision);
                 return new BranchSCMRevision((BranchSCMHead) head, revision);
-            } else if (head instanceof TagSCMHead) {
+            }
+
+            if (head instanceof TagSCMHead) {
                 listener.getLogger().format("Querying the current revision of tag %s...%n", head.getName());
-                // Gitea does not provide an API to fetch a single tag by name, so we have to fetch them all and iterate
-                final List<GiteaTag> tags = c.fetchTags(repoOwner, repository);
-                for (GiteaTag tag : tags) {
-                    if (tag.getCommit() == null || tag.getCommit().getSha() == null) {
-                        // bad data from server, ignore
+                List<Reference> tags = repoApi.repoListGitRefs(repoOwner, repository, "tags/" + head.getName());
+
+                for (Reference ref : tags) {
+                    if (!ref.getRef().equalsIgnoreCase("refs/tags/" + head.getName())) {
                         continue;
                     }
-                    if (head.getName().equals(tag.getName())) {
-                        String revision = tag.getCommit().getSha();
-                        Date timestamp = null;
-                        if (!tag.getId().equalsIgnoreCase(tag.getCommit().getSha())) {
-                            // annotated tag, timestamp is annotation time
-                            try {
-                                GiteaAnnotatedTag annotatedTag =
-                                        c.fetchAnnotatedTag(repoOwner, repository, tag.getId());
-                                GiteaAnnotatedTag.Tagger tagger = annotatedTag.getTagger();
-                                timestamp = tagger != null ? tagger.getDate() : null;
-                            } catch (GiteaHttpStatusException e) {
-                                // ignore, best effort, fall back to commit
-                            }
-                        }
-                        if (timestamp == null) {
-                            // try to get the timestamp of the commit itself
-                            try {
-                                GiteaCommitDetail detail =
-                                        c.fetchCommit(repoOwner, repository, tag.getCommit().getSha());
-                                GiteaCommitDetail.GitCommit commit = detail.getCommit();
-                                GiteaCommitDetail.GitActor committer = commit != null ? commit.getCommitter() : null;
-                                timestamp = committer != null ? committer.getDate() : null;
-                            } catch (GiteaHttpStatusException e) {
-                                if (e.getStatusCode() != 404) {
-                                    throw e;
-                                }
-                            }
-                        }
-                        listener.getLogger().format("Current revision of tag %s is %s%n", head.getName(),
-                                revision);
-                        final long ts = timestamp == null ? 0L : timestamp.getTime();
-                        return new TagSCMRevision(new TagSCMHead(tag.getName(), ts), revision);
-                    }
+
+                    String revision = ref.getObject().getSha();
+                    // Date timestamp = null;
+                    // final long ts = timestamp == null ? 0L : timestamp.getTime();
+                    final long ts = 0L;
+
+                    // TODO At some point: Identify, why annotatedTags should be fetched here
+
+                    listener.getLogger().format("Current revision of tag %s is %s%n", head.getName(), revision);
+                    return new TagSCMRevision(new TagSCMHead(head.getName(), ts), revision);
                 }
-                listener.getLogger()
-                        .format("Tag %s does not / no longer exists. Current tags are: %s%n", head.getName(),
-                                tags.stream().map(GiteaTag::getName).collect(Collectors.joining(", ")));
+
+                String existingTags = tags.stream().map(Reference::getRef).collect(Collectors.joining(", "));
+                listener.getLogger().format("Tag %s does not / no longer exists. Current tags are: %s%n", head.getName(), existingTags);
                 return null;
-            } else if (head instanceof PullRequestSCMHead) {
+            }
+
+            if (head instanceof PullRequestSCMHead) {
                 PullRequestSCMHead h = (PullRequestSCMHead) head;
                 listener.getLogger().format("Querying the current revision of pull request #%s...%n", h.getId());
-                GiteaPullRequest pr =
-                        c.fetchPullRequest(repoOwner, repository, Long.parseLong(h.getId()));
-                if (pr.getState() == GiteaIssueState.OPEN) {
-                    listener.getLogger().format("Current revision of pull request #%s is %s%n",
-                            h.getId(), pr.getHead().getSha());
-                    return new PullRequestSCMRevision(
-                            h,
-                            new BranchSCMRevision(
-                                    h.getTarget(),
-                                    pr.getBase().getSha()
-                            ),
-                            new BranchSCMRevision(
-                                    new BranchSCMHead(h.getOriginName()),
-                                    pr.getHead().getSha()
-                            )
-                    );
-                } else {
+                PullRequest pr = repoApi.repoGetPullRequest(repoOwner, repository, Long.parseLong(h.getId()));
+
+                if (pr.getState().equalsIgnoreCase(GiteaIssueState.OPEN.toString())) {
                     listener.getLogger().format("Pull request #%s is CLOSED%n", h.getId());
                     return null;
                 }
-            } else {
-                listener.getLogger().format("Unknown head: %s of type %s%n", head.getName(), head.getClass().getName());
-                return null;
+
+                listener.getLogger().format("Current revision of pull request #%s is %s%n", h.getId(), pr.getHead().getSha());
+                return new PullRequestSCMRevision(
+                    h,
+                    new BranchSCMRevision(
+                        h.getTarget(),
+                        pr.getBase().getSha()
+                    ),
+                    new BranchSCMRevision(
+                        new BranchSCMHead(h.getOriginName()),
+                        pr.getHead().getSha()
+                    )
+                );
             }
+        } catch (ApiException e) {
+            throw new IOException(e.getMessage(), e.getCause());
         }
+
+        listener.getLogger().format("Unknown head: %s of type %s%n", head.getName(), head.getClass().getName());
+        return null;
     }
 
     @Override
@@ -676,6 +671,33 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
         }
         return Gitea.server(serverUrl)
                 .as(AuthenticationTokens.convert(GiteaAuth.class, credentials));
+    }
+
+    /*package*/ ApiClient giteaConnectViaClient() throws AbortException {
+        if (GiteaServers.get().findServer(serverUrl) == null) {
+            throw new AbortException("Unknown server: " + serverUrl);
+        }
+        StandardCredentials credentials = credentials();
+        SCMSourceOwner owner = getOwner();
+        if (owner != null) {
+            CredentialsProvider.track(owner, credentials);
+        }
+        GiteaAuth authentication = AuthenticationTokens.convert(GiteaAuth.class, credentials);
+
+        ApiClient client = new ApiClient();
+        client.setBasePath(UriTemplate.buildFromTemplate(serverUrl).literal("/api/v1").build().expand());
+
+        if (authentication instanceof GiteaAuthToken) {
+            ApiKeyAuth auth = (ApiKeyAuth)client.getAuthentication("AuthorizationHeaderToken");
+            auth.setApiKeyPrefix("token ");
+            auth.setApiKey(((GiteaAuthToken)authentication).getToken());
+        } else if (authentication instanceof GiteaAuthUser) {
+            HttpBasicAuth auth = (HttpBasicAuth)client.getAuthentication("BasicAuth");
+            auth.setUsername(((GiteaAuthUser)authentication).getUsername());
+            auth.setPassword(((GiteaAuthUser)authentication).getPassword());
+        }
+
+        return client;
     }
 
     public StandardCredentials credentials() {
