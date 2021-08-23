@@ -27,6 +27,9 @@ import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Util;
 import hudson.model.TaskListener;
+import io.gitea.model.PullRequest;
+import io.gitea.model.Reference;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Arrays;
@@ -62,11 +65,11 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
     @CheckForNull
     private final Set<String> requestedTagNames;
     @CheckForNull
-    private Iterable<GiteaPullRequest> pullRequests;
+    private Iterable<PullRequest> pullRequests;
     @CheckForNull
-    private Iterable<GiteaBranch> branches;
+    private Iterable<Reference> branches;
     @CheckForNull
-    private Iterable<GiteaTag> tags;
+    private Iterable<Reference> tags;
     /**
      * The repository collaborator names or {@code null} if not provided.
      */
@@ -253,7 +256,7 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
      * may be empty if not {@link #isFetchPRs()}
      */
     @NonNull
-    public Iterable<GiteaPullRequest> getPullRequests() {
+    public Iterable<PullRequest> getPullRequests() {
         return Util.fixNull(pullRequests);
     }
 
@@ -262,7 +265,7 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
      *
      * @param pullRequests the pull request details.
      */
-    public void setPullRequests(@CheckForNull Iterable<GiteaPullRequest> pullRequests) {
+    public void setPullRequests(@CheckForNull Iterable<PullRequest> pullRequests) {
         this.pullRequests = pullRequests;
     }
 
@@ -273,7 +276,7 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
      * @return the branch details (may be empty)
      */
     @NonNull
-    public final Iterable<GiteaBranch> getBranches() {
+    public final Iterable<Reference> getBranches() {
         return Util.fixNull(branches);
     }
 
@@ -282,18 +285,18 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
      *
      * @param branches the branch details.
      */
-    public final void setBranches(@CheckForNull Iterable<GiteaBranch> branches) {
+    public final void setBranches(@CheckForNull Iterable<Reference> branches) {
         this.branches = branches;
     }
 
     /**
-     * Returns the branch details or an empty list if either the request did not specify to {@link #isFetchBranches()}
-     * or if the branch details have not been provided by {@link #setBranches(Iterable)} yet.
+     * Returns the tag details or an empty list if either the request did not specify to {@link #isFetchTags()}
+     * or if the tag details have not been provided by {@link #setTags(Iterable)} yet.
      *
-     * @return the branch details (may be empty)
+     * @return the tag details (may be empty)
      */
     @NonNull
-    public final Iterable<GiteaTag> getTags() {
+    public final Iterable<Reference> getTags() {
         return Util.fixNull(tags);
     }
 
@@ -302,7 +305,7 @@ public class GiteaSCMSourceRequest extends SCMSourceRequest {
      *
      * @param tags the branch details.
      */
-    public final void setTags(@CheckForNull Iterable<GiteaTag> tags) {
+    public final void setTags(@CheckForNull Iterable<Reference> tags) {
         this.tags = tags;
     }
 

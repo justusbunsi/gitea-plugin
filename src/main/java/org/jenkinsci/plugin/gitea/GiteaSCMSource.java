@@ -52,6 +52,7 @@ import io.gitea.auth.HttpBasicAuth;
 import io.gitea.api.RepositoryApi;
 import io.gitea.model.PullRequest;
 import io.gitea.model.Reference;
+import io.gitea.model.Repository;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -133,7 +134,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
     private String credentialsId;
     private List<SCMSourceTrait> traits = new ArrayList<>();
     private transient String sshRemote;
-    private transient GiteaRepository giteaRepository;
+    private transient GiteaRepository deprecatedGiteaRepository;
+    private transient Repository giteaRepository;
 
     @DataBoundConstructor
     public GiteaSCMSource(String serverUrl, String repoOwner, String repository) {
@@ -197,8 +199,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
             listener.getLogger().format("Looking up repository %s/%s%n", repoOwner, repository);
 
             RepositoryApi repoApi = new RepositoryApi(client);
-            // ensure repository exists
-            repoApi.repoGet(repoOwner, repository);
+            giteaRepository = repoApi.repoGet(repoOwner, repository);
+            sshRemote = giteaRepository.getSshUrl();
 
             if (head instanceof BranchSCMHead) {
                 listener.getLogger().format("Querying the current revision of branch %s...%n", head.getName());
@@ -264,62 +266,68 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
     }
 
     @Override
-    protected void retrieve(SCMSourceCriteria criteria, @NonNull SCMHeadObserver observer, SCMHeadEvent<?> event,
-                            @NonNull final TaskListener listener) throws IOException, InterruptedException {
-        try (GiteaConnection c = gitea().open()) {
+    protected void retrieve(SCMSourceCriteria criteria, @NonNull SCMHeadObserver observer, SCMHeadEvent<?> event, @NonNull final TaskListener listener) throws IOException, InterruptedException {
+        try {
+            ApiClient client = giteaConnectViaClient();
+            listener.getLogger().format("=== NEW IMPLEMENTATION ===%n");
             listener.getLogger().format("Looking up repository %s/%s%n", repoOwner, repository);
-            giteaRepository = c.fetchRepository(repoOwner, repository);
+
+            RepositoryApi repoApi = new RepositoryApi(client);
+            // ensure repository exists
+            giteaRepository = repoApi.repoGet(repoOwner, repository);
             sshRemote = giteaRepository.getSshUrl();
+
             if (giteaRepository.isEmpty()) {
                 listener.getLogger().format("Repository %s is empty%n", repository);
                 return;
             }
+
             try (GiteaSCMSourceRequest request = new GiteaSCMSourceContext(criteria, observer)
                     .withTraits(getTraits())
                     .newRequest(this, listener)) {
-                request.setConnection(c);
+                // Collect data from server
                 if (request.isFetchBranches()) {
-                    request.setBranches(c.fetchBranches(giteaRepository));
+                    request.setBranches(repoApi.repoListGitRefs(repoOwner, repository, "heads"));
                 }
                 if (request.isFetchPRs()) {
                     if (giteaRepository.isMirror()) {
                         listener.getLogger().format("%n  Ignoring pull requests as repository is a mirror...%n");
                     } else {
-                        request.setPullRequests(c.fetchPullRequests(giteaRepository, EnumSet.of(GiteaIssueState.OPEN)));
+                        List<PullRequest> pulls = new ArrayList<PullRequest>();
+                        Integer page = 1;
+                        List<PullRequest> tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.toString(), null, null, null, page, null);
+                        while (tmp.size() > 0) {
+                            pulls.addAll(tmp);
+                            page++;
+                            tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.toString(), null, null, null, page, null);
+                            request.setPullRequests(pulls);
+                        }
                     }
                 }
                 if (request.isFetchTags()) {
-                    final GiteaVersion version = c.fetchVersion();
-                    VersionNumber v = version.getVersionNumber();
-                    if (v.isOlderThan(TAG_SUPPORT_MINIMUM_VERSION)) {
-                        listener.getLogger()
-                                .format("%n  Ignoring tags as Gitea server is version %s and version %s is the "
-                                                + "minimum version to support tag indexing%n",
-                                        version.getVersion(), TAG_SUPPORT_MINIMUM_VERSION.toString());
-                        request.setTags(null);
-                    } else {
-                        request.setTags(c.fetchTags(giteaRepository));
-                    }
+                    request.setTags(repoApi.repoListGitRefs(repoOwner, repository, "tags"));
                 }
 
+                // Filter data by criteria
                 if (request.isFetchBranches()) {
                     int count = 0;
                     listener.getLogger().format("%n  Checking branches...%n");
-                    for (final GiteaBranch b : request.getBranches()) {
+                    for (final Reference b : request.getBranches()) {
                         count++;
+                        String branchName = b.getRef().replace("refs/heads/", "");
                         listener.getLogger().format("%n    Checking branch %s%n",
                                 HyperlinkNote.encodeTo(
-                                        UriTemplate.buildFromTemplate(giteaRepository.getHtmlUrl())
-                                                .literal("/src/branch")
-                                                .path("branch")
-                                                .build()
-                                                .set("branch", b.getName())
-                                                .expand(),
-                                        b.getName()
+                                    UriTemplate.buildFromTemplate(giteaRepository.getHtmlUrl())
+                                        .literal("/src/branch")
+                                        .path("branch")
+                                        .build()
+                                        .set("branch", branchName)
+                                        .expand(),
+                                    branchName
                                 )
                         );
-                        final BranchSCMHead head = new BranchSCMHead(b.getName());
-                        final BranchSCMRevision revision = new BranchSCMRevision(head, b.getCommit().getId());
+                        final BranchSCMHead head = new BranchSCMHead(branchName);
+                        final BranchSCMRevision revision = new BranchSCMRevision(head, b.getObject().getSha());
                         if (request.process(head, revision, this::createProbe, new CriteriaWitness<>(listener))) {
                             listener.getLogger().format("%n  %d branches were processed (query completed)%n", count);
                             return;
@@ -327,18 +335,17 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     }
                     listener.getLogger().format("%n  %d branches were processed%n", count);
                 }
-                if (request.isFetchPRs() && !giteaRepository.isMirror() && !(request.getForkPRStrategies().isEmpty()
-                        && request.getOriginPRStrategies().isEmpty())) {
+                if (request.isFetchPRs() && !giteaRepository.isMirror() && !(request.getForkPRStrategies().isEmpty() && request.getOriginPRStrategies().isEmpty())) {
                     int count = 0;
                     listener.getLogger().format("%n  Checking pull requests...%n");
-                    for (final GiteaPullRequest p : request.getPullRequests()) {
+                    for (final PullRequest p : request.getPullRequests()) {
                         if (p == null) {
                             continue;
                         }
                         count++;
                         listener.getLogger().format("%n  Checking pull request %s%n",
                                 HyperlinkNote.encodeTo(
-                                        UriTemplate.buildFromTemplate(giteaRepository.getHtmlUrl())
+                                        UriTemplate.buildFromTemplate(deprecatedGiteaRepository.getHtmlUrl())
                                                 .literal("/pulls")
                                                 .path("number")
                                                 .build()
@@ -347,7 +354,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                                         "#" + p.getNumber()
                                 )
                         );
-                        String originOwner = p.getHead().getRepo().getOwner().getUsername();
+                        String originOwner = p.getHead().getRepo().getOwner().getLogin();
                         String originRepository = p.getHead().getRepo().getName();
                         Set<ChangeRequestCheckoutStrategy> strategies = request.getPRStrategies(
                                 !StringUtils.equalsIgnoreCase(repoOwner, originOwner)
@@ -393,52 +400,25 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                 if (request.isFetchTags()) {
                     int count = 0;
                     listener.getLogger().format("%n  Checking tags...%n");
-                    for (final GiteaTag tag : request.getTags()) {
-                        if (tag.getCommit() == null) {
-                            // bad data from server, ignore
-                            continue;
-                        }
+                    for (final Reference tag : request.getTags()) {
                         count++;
+                        String tagName = tag.getRef().replace("refs/tags/", "");
                         listener.getLogger().format("%n    Checking tag %s%n",
                                 HyperlinkNote.encodeTo(
-                                        UriTemplate.buildFromTemplate(giteaRepository.getHtmlUrl())
-                                                .literal("/src/tag")
-                                                .path("tag")
-                                                .build()
-                                                .set("tag", tag.getName())
-                                                .expand(),
-                                        tag.getName()
+                                    UriTemplate.buildFromTemplate(giteaRepository.getHtmlUrl())
+                                        .literal("/src/tag")
+                                        .path("tag")
+                                        .build()
+                                        .set("tag", tagName)
+                                        .expand(),
+                                    tagName
                                 )
                         );
-                        Date timestamp = null;
-                        if (!tag.getId().equalsIgnoreCase(tag.getCommit().getSha())) {
-                            // annotated tag, timestamp is annotation time
-                            try {
-                                GiteaAnnotatedTag annotatedTag =
-                                        c.fetchAnnotatedTag(repoOwner, repository, tag.getId());
-                                listener.getLogger().format("annotated tag: %s%n", annotatedTag);
-                                GiteaAnnotatedTag.Tagger tagger = annotatedTag.getTagger();
-                                timestamp = tagger != null ? tagger.getDate() : null;
-                            } catch (GiteaHttpStatusException e) {
-                                // ignore, best effort, fall back to commit
-                            }
-                        }
-                        if (timestamp == null) {
-                            // try to get the timestamp of the commit itself
-                            try {
-                                GiteaCommitDetail detail =
-                                        c.fetchCommit(repoOwner, repository, tag.getCommit().getSha());
-                                GiteaCommitDetail.GitCommit commit = detail.getCommit();
-                                GiteaCommitDetail.GitActor committer = commit != null ? commit.getCommitter() : null;
-                                timestamp = committer != null ? committer.getDate() : null;
-                            } catch (GiteaHttpStatusException e) {
-                                if (e.getStatusCode() != 404) {
-                                    throw e;
-                                }
-                            }
-                        }
-                        TagSCMHead head = new TagSCMHead(tag.getName(), timestamp == null ? 0L : timestamp.getTime());
-                        TagSCMRevision revision = new TagSCMRevision(head, tag.getCommit().getSha());
+                        final long ts = 0L;
+                        // TODO At some point: Identify, why annotatedTags should be fetched here
+
+                        TagSCMHead head = new TagSCMHead(tagName, ts);
+                        TagSCMRevision revision = new TagSCMRevision(head, tag.getObject().getSha());
                         if (request.process(head, revision, this::createProbe, new CriteriaWitness<>(listener))) {
                             listener.getLogger().format("%n  %d tags were processed (query completed)%n", count);
                             return;
@@ -447,6 +427,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     listener.getLogger().format("%n  %d tags were processed%n", count);
                 }
             }
+        } catch (ApiException e) {
+            throw new IOException(e.getMessage(), e.getCause());
         }
     }
 
@@ -454,14 +436,14 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
     @Override
     protected List<Action> retrieveActions(SCMSourceEvent event, @NonNull TaskListener listener)
             throws IOException, InterruptedException {
-        if (giteaRepository == null) {
+        if (deprecatedGiteaRepository == null) {
             try (GiteaConnection c = gitea().open()) {
                 listener.getLogger().format("Looking up repository %s/%s%n", repoOwner, repository);
-                giteaRepository = c.fetchRepository(repoOwner, repository);
+                deprecatedGiteaRepository = c.fetchRepository(repoOwner, repository);
             }
         }
         List<Action> result = new ArrayList<>();
-        result.add(new ObjectMetadataAction(null, giteaRepository.getDescription(), giteaRepository.getWebsite()));
+        result.add(new ObjectMetadataAction(null, deprecatedGiteaRepository.getDescription(), deprecatedGiteaRepository.getWebsite()));
         result.add(new GiteaLink("icon-gitea-repo", UriTemplate.buildFromTemplate(serverUrl)
                 .path(UriTemplateBuilder.var("owner"))
                 .path(UriTemplateBuilder.var("repository"))
@@ -477,10 +459,10 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
     @Override
     protected List<Action> retrieveActions(@NonNull SCMHead head, SCMHeadEvent event, @NonNull TaskListener listener)
             throws IOException, InterruptedException {
-        if (giteaRepository == null) {
+        if (deprecatedGiteaRepository == null) {
             try (GiteaConnection c = gitea().open()) {
                 listener.getLogger().format("Looking up repository %s/%s%n", repoOwner, repository);
-                giteaRepository = c.fetchRepository(repoOwner, repository);
+                deprecatedGiteaRepository = c.fetchRepository(repoOwner, repository);
             }
         }
         List<Action> result = new ArrayList<>();
@@ -501,7 +483,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     branchUrl
             ));
             result.add(new GiteaLink("icon-gitea-branch", branchUrl));
-            if (head.getName().equals(giteaRepository.getDefaultBranch())) {
+            if (head.getName().equals(deprecatedGiteaRepository.getDefaultBranch())) {
                 result.add(new PrimaryInstanceMetadataAction());
             }
         } else if (head instanceof TagSCMHead) {
@@ -521,7 +503,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     tagUrl
             ));
             result.add(new GiteaLink("icon-gitea-branch", tagUrl));
-            if (head.getName().equals(giteaRepository.getDefaultBranch())) {
+            if (head.getName().equals(deprecatedGiteaRepository.getDefaultBranch())) {
                 result.add(new PrimaryInstanceMetadataAction());
             }
         } else if (head instanceof PullRequestSCMHead) {
@@ -568,9 +550,9 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     final VersionNumber versionNumber = giteaVersion.getVersionNumber();
 
                     if (!versionNumber.isOlderThan(READ_ACCESS_COLLABORATOR_LISTING_SUPPORT_MINIMUM_VERSION) ||
-                            giteaRepository.getPermissions().isAdmin()) {
+                            deprecatedGiteaRepository.getPermissions().isAdmin()) {
                         request.setCollaboratorNames(
-                                c.fetchCollaborators(giteaRepository).stream().map(GiteaOwner::getUsername)
+                                c.fetchCollaborators(deprecatedGiteaRepository).stream().map(GiteaOwner::getUsername)
                                         .collect(Collectors.toSet()));
                     } else {
                         listener.getLogger()
