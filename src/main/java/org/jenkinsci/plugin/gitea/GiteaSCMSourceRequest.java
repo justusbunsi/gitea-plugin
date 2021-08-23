@@ -44,10 +44,7 @@ import jenkins.scm.api.SCMHeadOrigin;
 import jenkins.scm.api.SCMSource;
 import jenkins.scm.api.mixin.ChangeRequestCheckoutStrategy;
 import jenkins.scm.api.trait.SCMSourceRequest;
-import org.jenkinsci.plugin.gitea.client.api.GiteaBranch;
 import org.jenkinsci.plugin.gitea.client.api.GiteaConnection;
-import org.jenkinsci.plugin.gitea.client.api.GiteaPullRequest;
-import org.jenkinsci.plugin.gitea.client.api.GiteaTag;
 
 public class GiteaSCMSourceRequest extends SCMSourceRequest {
     private final boolean fetchBranches;
