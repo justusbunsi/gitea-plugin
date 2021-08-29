@@ -258,8 +258,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                 listener.getLogger().format("Querying the current revision of pull request #%s...%n", h.getId());
                 PullRequest pr = repoApi.repoGetPullRequest(repoOwner, repository, Long.parseLong(h.getId()));
 
-                if (pr.getState().equalsIgnoreCase(GiteaIssueState.OPEN.toString())) {
-                    listener.getLogger().format("Pull request #%s is CLOSED%n", h.getId());
+                if (!pr.getState().equalsIgnoreCase(GiteaIssueState.OPEN.getKey())) {
+                    listener.getLogger().format("Pull request #%s is NOT OPEN%n", h.getId());
                     return null;
                 }
 
@@ -318,11 +318,11 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                         listener.getLogger().format("%n  Fetching pull requests...%n");
                         List<PullRequest> pulls = new ArrayList<PullRequest>();
                         Integer page = 1;
-                        List<PullRequest> tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.toString(), null, null, null, page, null);
+                        List<PullRequest> tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.getKey(), null, null, null, page, null);
                         while (tmp.size() > 0) {
                             pulls.addAll(tmp);
                             page++;
-                            tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.toString(), null, null, null, page, null);
+                            tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.getKey(), null, null, null, page, null);
                             request.setPullRequests(pulls);
                         }
                     }
