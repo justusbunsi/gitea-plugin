@@ -83,9 +83,7 @@ public class GiteaPushSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPushEvent>
      */
     @Override
     public String descriptionFor(@NonNull SCMNavigator navigator) {
-        String ref = getPayload().getRef();
-        ref = ref.startsWith(Constants.R_HEADS) ? ref.substring(Constants.R_HEADS.length()) : ref;
-        return "Push event to branch " + ref + " in repository " + getPayload().getRepository().getName();
+        return "Push event to branch/tag " + getCleanPayloadRef() + " in repository " + getPayload().getRepository().getName();
     }
 
     /**
@@ -93,9 +91,7 @@ public class GiteaPushSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPushEvent>
      */
     @Override
     public String descriptionFor(SCMSource source) {
-        String ref = getPayload().getRef();
-        ref = ref.startsWith(Constants.R_HEADS) ? ref.substring(Constants.R_HEADS.length()) : ref;
-        return "Push event to branch " + ref;
+        return "Push event to branch/tag " + getCleanPayloadRef();
     }
 
     /**
@@ -103,9 +99,7 @@ public class GiteaPushSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPushEvent>
      */
     @Override
     public String description() {
-        String ref = getPayload().getRef();
-        ref = ref.startsWith(Constants.R_HEADS) ? ref.substring(Constants.R_HEADS.length()) : ref;
-        return "Push event to branch " + ref + " in repository " +
+        return "Push event to branch/tag " + getCleanPayloadRef() + " in repository " +
                 getPayload().getRepository().getOwner().getUsername() + "/" +
                 getPayload().getRepository().getName();
     }
@@ -117,11 +111,19 @@ public class GiteaPushSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPushEvent>
     @Override
     public Map<SCMHead, SCMRevision> headsFor(GiteaSCMSource source) {
         String ref = getPayload().getRef();
-        ref = ref.startsWith(Constants.R_HEADS) ? ref.substring(Constants.R_HEADS.length()) : ref;
-        BranchSCMHead h = new BranchSCMHead(ref);
-        return Collections.<SCMHead, SCMRevision>singletonMap(h,
-                StringUtils.isNotBlank(getPayload().getAfter())
-                        ? new BranchSCMRevision(h, getPayload().getAfter()) : null);
+        SCMHead h = null;
+        SCMRevision r = null;
+        Boolean afterExists = StringUtils.isNotBlank(getPayload().getAfter());
+        if (ref.startsWith(Constants.R_HEADS)) {
+            h = new BranchSCMHead(getCleanPayloadRef());
+            r = afterExists ? new BranchSCMRevision((BranchSCMHead)h, getPayload().getAfter()) : null;
+        }
+
+        if (ref.startsWith(Constants.R_TAGS)) {
+            h = new TagSCMHead(getCleanPayloadRef(), 0L);
+            r = afterExists ? new TagSCMRevision((TagSCMHead)h, getPayload().getRef()) : null;
+        }
+        return Collections.<SCMHead, SCMRevision>singletonMap(h, r);
     }
 
     /**
@@ -183,5 +185,19 @@ public class GiteaPushSCMEvent extends AbstractGiteaSCMHeadEvent<GiteaPushEvent>
         protected void process(GiteaPushSCMEvent event) {
             SCMHeadEvent.fireNow(event);
         }
+    }
+
+    private String getCleanPayloadRef() {
+        String ref = getPayload().getRef();
+
+        if (ref.startsWith(Constants.R_HEADS)) {
+            return ref.substring(Constants.R_HEADS.length());
+        }
+        
+        if (ref.startsWith(Constants.R_TAGS)) {
+            return ref.substring(Constants.R_TAGS.length());
+        }
+
+        return ref;
     }
 }
