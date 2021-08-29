@@ -280,12 +280,14 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     .newRequest(this, listener)) {
                 // Collect data from server
                 if (request.isFetchBranches()) {
+                    listener.getLogger().format("%n  Fetching branches...%n");
                     request.setBranches(repoApi.repoListGitRefs(repoOwner, repository, "heads"));
                 }
                 if (request.isFetchPRs()) {
                     if (giteaRepository.isMirror()) {
                         listener.getLogger().format("%n  Ignoring pull requests as repository is a mirror...%n");
                     } else {
+                        listener.getLogger().format("%n  Fetching pull requests...%n");
                         List<PullRequest> pulls = new ArrayList<PullRequest>();
                         Integer page = 1;
                         List<PullRequest> tmp = repoApi.repoListPullRequests(repoOwner, repository, GiteaIssueState.OPEN.toString(), null, null, null, page, null);
@@ -298,6 +300,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     }
                 }
                 if (request.isFetchTags()) {
+                    listener.getLogger().format("%n  Fetching tags...%n");
                     request.setTags(repoApi.repoListGitRefs(repoOwner, repository, "tags"));
                 }
 
