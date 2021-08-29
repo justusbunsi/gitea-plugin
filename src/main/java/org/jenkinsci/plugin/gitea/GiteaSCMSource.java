@@ -50,14 +50,22 @@ import io.gitea.ApiException;
 import io.gitea.auth.ApiKeyAuth;
 import io.gitea.auth.HttpBasicAuth;
 import io.gitea.api.RepositoryApi;
+import io.gitea.model.AnnotatedTag;
+import io.gitea.model.Commit;
+import io.gitea.model.CommitUser;
 import io.gitea.model.PullRequest;
 import io.gitea.model.Reference;
+import io.gitea.model.RepoCommit;
 import io.gitea.model.Repository;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -212,13 +220,27 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     }
 
                     String revision = ref.getObject().getSha();
-                    // Date timestamp = null;
-                    // final long ts = timestamp == null ? 0L : timestamp.getTime();
-                    final long ts = 0L;
-
-                    // TODO At some point: Identify, why annotatedTags should be fetched here
+                    Date timestamp = null;
+                    if (ref.getObject().getType().equalsIgnoreCase("tag")) {
+                        // annotated tag, timestamp is annotation time
+                        try {
+                            AnnotatedTag annotatedTag = repoApi.getAnnotatedTag(repoOwner, repository, ref.getObject().getSha());
+                            CommitUser tagger = annotatedTag.getTagger();
+                            timestamp = tagger != null ? dateFromIsoString(tagger.getDate()) : null;
+                        } catch (ApiException e) {
+                            // ignore, best effort, fall back to commit
+                        }
+                    }
+                    if (timestamp == null) {
+                        // try to get the timestamp of the commit itself
+                        Commit details = repoApi.repoGetSingleCommit(repoOwner, repository, ref.getObject().getSha());
+                        RepoCommit commit = details.getCommit();
+                        CommitUser committer = commit.getCommitter();
+                        timestamp = committer != null ? dateFromIsoString(committer.getDate()) : null;
+                    }
 
                     listener.getLogger().format("Current revision of tag %s is %s%n", head.getName(), revision);
+                    final long ts = timestamp == null ? 0L : timestamp.getTime();
                     return new TagSCMRevision(new TagSCMHead(head.getName(), ts), revision);
                 }
 
@@ -410,9 +432,27 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                                     tagName
                                 )
                         );
-                        final long ts = 0L;
-                        // TODO At some point: Identify, why annotatedTags should be fetched here
 
+                        Date timestamp = null;
+                        if (tag.getObject().getType().equalsIgnoreCase("tag")) {
+                            // annotated tag, timestamp is annotation time
+                            try {
+                                AnnotatedTag annotatedTag = repoApi.getAnnotatedTag(repoOwner, repository, tag.getObject().getSha());
+                                CommitUser tagger = annotatedTag.getTagger();
+                                timestamp = tagger != null ? dateFromIsoString(tagger.getDate()) : null;
+                            } catch (ApiException e) {
+                                // ignore, best effort, fall back to commit
+                            }
+                        }
+                        if (timestamp == null) {
+                            // try to get the timestamp of the commit itself
+                            Commit details = repoApi.repoGetSingleCommit(repoOwner, repository, tag.getObject().getSha());
+                            RepoCommit commit = details.getCommit();
+                            CommitUser committer = commit.getCommitter();
+                            timestamp = committer != null ? dateFromIsoString(committer.getDate()) : null;
+                        }
+
+                        final long ts = timestamp == null ? 0L : timestamp.getTime();
                         TagSCMHead head = new TagSCMHead(tagName, ts);
                         TagSCMRevision revision = new TagSCMRevision(head, tag.getObject().getSha());
                         if (request.process(head, revision, this::createProbe, new CriteriaWitness<>(listener))) {
@@ -676,6 +716,12 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
         }
 
         return client;
+    }
+
+    /*package*/ Date dateFromIsoString(String s) {
+        TemporalAccessor ta = DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(s);
+        Instant i = Instant.from(ta);
+        return Date.from(i);
     }
 
     public StandardCredentials credentials() {
