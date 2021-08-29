@@ -203,6 +203,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
             giteaRepository = repoApi.repoGet(repoOwner, repository);
             sshRemote = giteaRepository.getSshUrl();
 
+            checkInterrupt();
+
             if (head instanceof BranchSCMHead) {
                 listener.getLogger().format("Querying the current revision of branch %s...%n", head.getName());
                 String revision = repoApi.repoGetBranch(repoOwner, repository, head.getName()).getCommit().getId();
@@ -215,6 +217,8 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                 List<Reference> tags = repoApi.repoListGitRefs(repoOwner, repository, "tags/" + head.getName());
 
                 for (Reference ref : tags) {
+                    checkInterrupt();
+
                     if (!ref.getRef().equalsIgnoreCase("refs/tags/" + head.getName())) {
                         continue;
                     }
@@ -300,11 +304,13 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
             try (GiteaSCMSourceRequest request = new GiteaSCMSourceContext(criteria, observer)
                     .withTraits(getTraits())
                     .newRequest(this, listener)) {
+                checkInterrupt();
                 // Collect data from server
                 if (request.isFetchBranches()) {
                     listener.getLogger().format("%n  Fetching branches...%n");
                     request.setBranches(repoApi.repoListGitRefs(repoOwner, repository, "heads"));
                 }
+                checkInterrupt();
                 if (request.isFetchPRs()) {
                     if (giteaRepository.isMirror()) {
                         listener.getLogger().format("%n  Ignoring pull requests as repository is a mirror...%n");
@@ -321,16 +327,18 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                         }
                     }
                 }
+                checkInterrupt();
                 if (request.isFetchTags()) {
                     listener.getLogger().format("%n  Fetching tags...%n");
                     request.setTags(repoApi.repoListGitRefs(repoOwner, repository, "tags"));
                 }
-
+                checkInterrupt();
                 // Filter data by criteria
                 if (request.isFetchBranches()) {
                     int count = 0;
                     listener.getLogger().format("%n  Checking branches...%n");
                     for (final Reference b : request.getBranches()) {
+                        checkInterrupt();
                         count++;
                         String branchName = b.getRef().replace("refs/heads/", "");
                         listener.getLogger().format("%n    Checking branch %s%n",
@@ -357,6 +365,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     int count = 0;
                     listener.getLogger().format("%n  Checking pull requests...%n");
                     for (final PullRequest p : request.getPullRequests()) {
+                        checkInterrupt();
                         if (p == null) {
                             continue;
                         }
@@ -379,6 +388,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                                         && StringUtils.equalsIgnoreCase(repository, originRepository)
                         );
                         for (ChangeRequestCheckoutStrategy strategy : strategies) {
+                            checkInterrupt();
                             final PullRequestSCMHead head = new PullRequestSCMHead(
                                     "PR-" + p.getNumber() + (strategies.size() > 1 ? "-" + strategy.name()
                                             .toLowerCase(Locale.ENGLISH) : ""),
@@ -419,6 +429,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                     int count = 0;
                     listener.getLogger().format("%n  Checking tags...%n");
                     for (final Reference tag : request.getTags()) {
+                        checkInterrupt();
                         count++;
                         String tagName = tag.getRef().replace("refs/tags/", "");
                         listener.getLogger().format("%n    Checking tag %s%n",
