@@ -230,6 +230,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                         try {
                             AnnotatedTag annotatedTag = repoApi.getAnnotatedTag(repoOwner, repository, ref.getObject().getSha());
                             CommitUser tagger = annotatedTag.getTagger();
+                            revision = annotatedTag.getObject().getSha();
                             timestamp = tagger != null ? dateFromIsoString(tagger.getDate()) : null;
                         } catch (ApiException e) {
                             // ignore, best effort, fall back to commit
