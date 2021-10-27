@@ -41,9 +41,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -74,7 +74,6 @@ import org.jenkinsci.plugin.gitea.client.api.GiteaRepository;
 import org.jenkinsci.plugin.gitea.client.api.GiteaTag;
 import org.jenkinsci.plugin.gitea.client.api.GiteaUser;
 import org.jenkinsci.plugin.gitea.client.api.GiteaVersion;
-import org.jenkinsci.plugin.gitea.client.http.PageLinkHeader;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
@@ -991,15 +990,13 @@ class DefaultGiteaConnection implements GiteaConnection {
                             iterator.remove();
                         }
                     }
-                } else {
-                    throw new GiteaHttpStatusException(status, connection.getResponseMessage());
+                    return list;
                 }
-            } finally {
-                connection.disconnect();
             }
+            throw new GiteaHttpStatusException(status, connection.getResponseMessage());
+        } finally {
+            connection.disconnect();
         }
-
-        return result;
     }
 
     private HttpURLConnection openConnection(UriTemplate template) throws IOException {
