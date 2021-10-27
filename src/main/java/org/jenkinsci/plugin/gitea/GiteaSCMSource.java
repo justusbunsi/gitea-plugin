@@ -310,7 +310,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                 if (request.isFetchBranches()) {
                     int count = 0;
                     listener.getLogger().format("%n  Checking branches...%n");
-                    for (final GiteaBranch b : c.fetchBranches(giteaRepository)) {
+                    for (final GiteaBranch b : request.getBranches()) {
                         count++;
                         listener.getLogger().format("%n    Checking branch %s%n",
                                 HyperlinkNote.encodeTo(
@@ -679,11 +679,14 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
     }
 
     public StandardCredentials credentials() {
+        SCMSourceOwner owner = getOwner();
         return CredentialsMatchers.firstOrNull(
                 CredentialsProvider.lookupCredentials(
                         StandardCredentials.class,
-                        getOwner(),
-                        Jenkins.getAuthentication(),
+                        owner,
+                        owner instanceof Queue.Task ?
+                                ((Queue.Task) owner).getDefaultAuthentication()
+                                : ACL.SYSTEM,
                         URIRequirementBuilder.fromUri(serverUrl).build()
                 ),
                 CredentialsMatchers.allOf(
