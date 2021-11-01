@@ -373,7 +373,7 @@ public class GiteaSCMSource extends AbstractGitSCMSource {
                         count++;
                         listener.getLogger().format("%n  Checking pull request %s%n",
                                 HyperlinkNote.encodeTo(
-                                        UriTemplate.buildFromTemplate(deprecatedGiteaRepository.getHtmlUrl())
+                                        UriTemplate.buildFromTemplate(giteaRepository.getHtmlUrl())
                                                 .literal("/pulls")
                                                 .path("number")
                                                 .build()
